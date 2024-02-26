@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken")
 
 const fs = require('fs').promises;
 const path = require('path');
+const Class  = require('../Model/classSchema.js');
+const { forEach } = require("../MW/Validations/teacherIdParamValidation.js");
 
 async function deleteFile(filePath) {
     try {
@@ -141,5 +143,27 @@ module.exports.deleteTeacherById = async(req, res, next)=>{
 }
 
 module.exports.getTeacherSupervisors = (req, res)=>{
-    res.status(200).json({message: "supervisors"});
+   
+try{
+    let classes = await Class.find({});
+    const supervisors = [];
+    if(!classes){
+        throw new Error("No Classes Found");
+    }
+    else{
+        classes.forEach(_class => {
+            try{
+                let teacher = classes.findOne({_id:_class.supervisor});
+                if(teacher){
+                    supervisors.push(teacher);
+                }
+        }
+        catch(err){
+            next(err);
+        }
+        });
+        res.status(200).json({supervisors: supervisors});
+    }
+}
+
 }
