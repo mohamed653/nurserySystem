@@ -1,169 +1,148 @@
 const Teacher = require("../Model/teacherSchema.js");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
 
-const fs = require('fs').promises;
-const path = require('path');
-const Class  = require('../Model/classSchema.js');
+const fs = require("fs").promises;
+const path = require("path");
+const Class = require("../Model/classSchema.js");
 const { forEach } = require("../MW/Validations/teacherIdParamValidation.js");
 
 async function deleteFile(filePath) {
-    try {
-        await fs.unlink(filePath);
-        console.log('File deleted successfully');
-    } catch (err) {
-        console.error('Error deleting file:', err);
-    }
+  try {
+    await fs.unlink(filePath);
+    console.log("File deleted successfully");
+  } catch (err) {
+    console.error("Error deleting file:", err);
+  }
 }
 
+module.exports.getTeachers = async (req, res) => {
+  res.status(200).json({ teachers: await Teacher.find({}) });
+};
 
-module.exports.getTeachers = async (req, res)=>{
-    res.status(200).json({teachers: await Teacher.find({})})
-}
+module.exports.addTeacher = async (req, res) => {
+  let imgPath = "NoImage";
+  if (req.file) imgPath = req.file.path;
 
+  let { fullName, email, password } = req.body;
+  email = email.toLowerCase();
 
-module.exports.addTeacher = async(req, res)=>{
+  password = await bcrypt.hash(password, 10);
+  const newTeacher = new Teacher({
+    fullName: fullName,
+    email: email,
+    password: password,
+    image: imgPath,
+  });
 
-    let imgPath = "NoImage";
-    if(req.file)
-        imgPath = req.file.path;
+  if (await Teacher.findOne({ email: email })) {
+    if (imgPath !== "NoImage") deleteFile(`${imgPath}`);
 
-    let {fullName, email, password} = req.body;
-    email = email.toLowerCase();
+    res.status(400).json({ message: "user already exist" });
+    return;
+  }
 
-    password = await bcrypt.hash(password, 10);
-    const newTeacher = new Teacher({
-        fullName : fullName,
-        email: email,
-        password: password,
-        image: imgPath
+  newTeacher
+    .save()
+    .then(() => {
+      console.log("user saved!");
+      res.status(201).json({ message: "added teacher" });
     })
+    .catch(() => {
+      if (imgPath !== "NoImage") deleteFile(`${imgPath}`);
 
-    if(await Teacher.findOne({email: email}))
-    {
-        if(imgPath !== "NoImage")
-            deleteFile(`${imgPath}`);
-
-        res.status(400).json({message: "user already exist"});
-        return;
-    }
-
-    newTeacher.save()
-    .then(()=>{
-        console.log("user saved!");
-        res.status(201).json({message: "added teacher"});
-    })
-    .catch(()=>{
-        if(imgPath !== "NoImage")
-            deleteFile(`${imgPath}`);
-
-        res.status(400).json({message: "failed"})
-    })
-    
-}
+      res.status(400).json({ message: "failed" });
+    });
+};
 
 // still didnt complete this function
-module.exports.updateTeachers = async(req, res, next)=>{
-    if(req.token.role === "admin" || req.token._id === +req.params.id)
-    {
-        try{
-            let {fullName, email, password} = req.body;
-            email = email.toLowerCase();
-            password = await bcrypt.hash(password, 10);
-            let teacherOldData = await Teacher.findOne({_id: req.params.id});
-            if(email !== teacherOldData.email)
-            {
-                if(await Teacher.findOne({email: email}))
-                {
-                    throw new Error("email already in use");
-                }
-                
-                await Teacher.findOneAndUpdate({_id: req.params.id}, 
-                    {
-                        _id: +req.params.id,
-                        email: email,
-                        password: password,
-                        fullName: fullName
-                    });
-                res.status(201).json(await Teacher.findById(req.params.id));
-            }
-            else
-            {
-                await Teacher.findOneAndUpdate({_id: req.params.id}, 
-                    {
-                        _id: +req.params.id,
-                        email: email,
-                        password: password,
-                        fullName: fullName
-                    });
-                res.status(201).json(await Teacher.findById(req.params.id));
-            }
-            
+module.exports.updateTeachers = async (req, res, next) => {
+  if (req.token.role === "admin" || req.token._id === +req.params.id) {
+    try {
+      let { fullName, email, password } = req.body;
+      email = email.toLowerCase();
+      password = await bcrypt.hash(password, 10);
+      let teacherOldData = await Teacher.findOne({ _id: req.params.id });
+      if (email !== teacherOldData.email) {
+        if (await Teacher.findOne({ email: email })) {
+          throw new Error("email already in use");
         }
-        catch(err)
-        {
-            next(err);
-        }
-    }
-    next(new Error("Unauthorized"));
-}
 
-module.exports.getTeacherById = async(req, res)=>{
-
-    if(req.token.role === 'admin' || req.token._id === +req.params.id)
-    {
-        try{
-            let teacher = await Teacher.findOne({_id: req.params.id});
-            res.status(200).json({teacher});
-        }
-        catch(err)
-        {
-            throw new Error("user doesn't exist");
-        }
+        await Teacher.findOneAndUpdate(
+          { _id: req.params.id },
+          {
+            _id: +req.params.id,
+            email: email,
+            password: password,
+            fullName: fullName,
+          }
+        );
+        res.status(201).json(await Teacher.findById(req.params.id));
+      } else {
+        await Teacher.findOneAndUpdate(
+          { _id: req.params.id },
+          {
+            _id: +req.params.id,
+            email: email,
+            password: password,
+            fullName: fullName,
+          }
+        );
+        res.status(201).json(await Teacher.findById(req.params.id));
+      }
+    } catch (err) {
+      next(err);
     }
-    else
-    {
-        res.status(401).json({message: "Unauthorized"});
-    }
-}
+  }
+  next(new Error("Unauthorized"));
+};
 
-module.exports.deleteTeacherById = async(req, res, next)=>{
-    try{
-        let teacher = await Teacher.findOneAndDelete({_id: req.params.id});
-        if(!teacher)
-            throw new Error();
-            res.status(204).json({message: `deleted teacher: ${req.params.id}`});
+module.exports.getTeacherById = async (req, res) => {
+  if (req.token.role === "admin" || req.token._id === +req.params.id) {
+    try {
+      let teacher = await Teacher.findOne({ _id: req.params.id });
+      res.status(200).json({ teacher });
+    } catch (err) {
+      throw new Error("user doesn't exist");
     }
-    catch(err)
-    {
-        err.message = "not found";
-        err.status = 404;
-        next(err);
-    } 
-}
+  } else {
+    res.status(401).json({ message: "Unauthorized" });
+  }
+};
 
-module.exports.getTeacherSupervisors = (req, res)=>{
-   
-try{
+module.exports.deleteTeacherById = async (req, res, next) => {
+  try {
+    let teacher = await Teacher.findOneAndDelete({ _id: req.params.id });
+    if (!teacher) throw new Error();
+    res.status(204).json({ message: `deleted teacher: ${req.params.id}` });
+  } catch (err) {
+    err.message = "not found";
+    err.status = 404;
+    next(err);
+  }
+};
+
+module.exports.getTeacherSupervisors = async (req, res, next) => {
+  try {
     let classes = await Class.find({});
     const supervisors = [];
-    if(!classes){
-        throw new Error("No Classes Found");
-    }
-    else{
-        classes.forEach(_class => {
-            try{
-                let teacher = classes.findOne({_id:_class.supervisor});
-                if(teacher){
-                    supervisors.push(teacher);
-                }
-        }
-        catch(err){
-            next(err);
-        }
-        });
-        res.status(200).json({supervisors: supervisors});
-    }
-}
 
-}
+    if (classes.length === 0) {
+      throw new Error("No Classes Found");
+    } else {
+      for (let _class of classes) {
+        try {
+          let teacher = await Class.findOne({ _id: _class.supervisor });
+          if (teacher) {
+            supervisors.push(teacher);
+          }
+        } catch (err) {
+          return next(err);
+        }
+      }
+      res.status(200).json({ supervisors: supervisors });
+    }
+  } catch (err) {
+    return next(err);
+  }
+};
